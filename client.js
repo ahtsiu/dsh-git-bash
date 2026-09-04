@@ -593,6 +593,7 @@ window.__ModuleLoader__.load({
     function installSettingsNamespaceDedupe(ctx) {
       const configurableTab = ctx.slots.entries(SETTINGS_TAB_SLOT)
         .find((entry) => entry.options.id === "configurable");
+      if (configurableTab === undefined) return;
       const store = configurableTab.inject().hooks.configurablePlugins;
       const dedupe = () => {
         const snapshot = store.getSnapshot();
