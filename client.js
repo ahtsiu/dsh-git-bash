@@ -643,7 +643,7 @@ window.__ModuleLoader__.load({
         locale: LOCALE_NAMESPACE,
         inject: () => ({
           scope,
-          pickDirectory: () => ctx.workspaces.pickDirectory(),
+          pickDirectory: () => ctx.uiWorkspace.pickDirectory(),
           t,
         }),
       }, GitBashSettingsCard));
@@ -679,7 +679,7 @@ window.__ModuleLoader__.load({
       "settingsScope",
       "connection",
       "remote",
-      "workspaces",
+      "uiWorkspace",
     ];
     module.exports = {
       apply,

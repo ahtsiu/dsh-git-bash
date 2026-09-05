@@ -151,7 +151,7 @@ function registerCompatRow(plugin, options = {}) {
         return settings.scope;
       },
     },
-    workspaces: {
+    uiWorkspace: {
       async pickDirectory() {
         pickCount += 1;
         return selectedDirectory;
@@ -245,7 +245,7 @@ test("client bundle registers a higher-priority Bash row wrapper", () => {
     "settingsScope",
     "connection",
     "remote",
-    "workspaces",
+    "uiWorkspace",
   ]);
 
   const { OriginalBashRow, registration } = registerCompatRow(plugin);
