@@ -25,7 +25,7 @@ Web 界面中的 Bash 工具行可以展开查看 command、cwd、stdout/stderr 
 从 npm 安装固定版本到 Web profile：
 
 ```sh
-dsh plugin --profile web add dsh-plugin-git-bash@0.4.0
+dsh plugin --profile web add dsh-plugin-git-bash@0.5.0
 ```
 
 更新现有安装时使用同一条命令。安装完成后重启 `dsh web`，让 Host 和浏览器 client 同时加载新版本，然后新建会话。
@@ -61,7 +61,7 @@ DSH ACL runner -> msys-token-guard.exe -> bash.exe -> child processes
 
 ## 配置 Git Bash 路径
 
-插件会自动探测 Program Files、用户安装目录和 Scoop 中的 Git Bash。Web GUI 中打开 `设置 -> 插件 -> 插件配置`，展开 `Git Bash` 卡片后可以直接输入 `bash.exe` 路径，或通过 `选择 Git 安装目录` 调用系统路径选择窗口。保存后，后续 Bash 命令会立即使用新路径；恢复默认值会回到 profile 配置或自动探测结果。
+插件会自动探测 Program Files、用户安装目录和 Scoop 中的 Git Bash。Web GUI 侧栏打开「插件」，进入本插件的 `git-bash-shell` 配置页后可以直接输入 `bash.exe` 路径，或通过 `选择 Git 安装目录` 调用系统路径选择窗口。保存后，后续 Bash 命令会立即使用新路径；恢复默认值会回到 profile 配置或自动探测结果。
 
 无 GUI 场景可以在启动 DSH 前设置 `DSH_GIT_BASH_PATH`：
 
@@ -85,7 +85,7 @@ dsh web
 
 - Windows x64
 - Node.js 24 或更高版本
-- DSH `0.1.7-rc.2`
+- DSH `0.2.0-rc.2`
 - Git for Windows x64
 
 npm 包包含预编译的 `msys-token-guard.exe` 和 `msys-token-guard-hook.dll`，普通安装不需要 Visual Studio 或 CMake。当前 native guard 仅支持 `win32-x64`；其他架构在受限模式下返回 `SANDBOX_UNAVAILABLE`，不会降级到未隔离执行。

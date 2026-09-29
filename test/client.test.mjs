@@ -182,7 +182,7 @@ function registerCompatRow(plugin, options = {}) {
         return () => tabListeners.delete(listener);
       },
       inject(name, callback) {
-        assert.ok(["tool.call.toolview", "settings.plugin.item"].includes(name));
+        assert.ok(["tool.call.toolview", "plugins.row.config"].includes(name));
         return callback();
       },
       register(registrationOptions, component) {
@@ -199,7 +199,7 @@ function registerCompatRow(plugin, options = {}) {
   plugin.apply(ctx);
   const registration = registrations.find((entry) => entry.options.name === "tool.call.toolview");
   const settingsRegistration = registrations.find(
-    (entry) => entry.options.name === "settings.plugin.item",
+    (entry) => entry.options.name === "plugins.row.config",
   );
   assert.ok(registration);
   assert.ok(settingsRegistration);
@@ -306,9 +306,8 @@ test("client bundle registers and operates the Git Bash settings card", async ()
   const harness = registerCompatRow(plugin, { selectedDirectory: "D:\\PortableGit" });
   const { settingsRegistration } = harness;
   assert.deepEqual(json(settingsRegistration.options), {
-    name: "settings.plugin.item",
-    key: "git-bash-shell",
-    priority: -100,
+    name: "plugins.row.config",
+    key: "dsh-plugin-git-bash#git-bash-shell",
     locale: "git-bash.settings",
   });
 
@@ -360,56 +359,6 @@ test("client bundle registers and operates the Git Bash settings card", async ()
   );
   await resetSave.props.onClick();
   assert.deepEqual(harness.settings.writes[1], { op: "unset", field: "executable" });
-});
-
-test("client bundle deduplicates shadowed settings namespaces", () => {
-  const { plugin } = loadClient();
-  const harness = registerCompatRow(plugin, {
-    settingsNamespaces: ["shell", "shell", "agent-loop"],
-  });
-
-  assert.deepEqual(json(harness.configurablePlugins.getSnapshot()), {
-    loaded: true,
-    namespaces: ["shell", "agent-loop"],
-  });
-  harness.dispose();
-});
-
-test("client bundle deduplicates namespaces once the configurable tab registers", () => {
-  const { plugin } = loadClient();
-  const harness = registerCompatRow(plugin, {
-    settingsNamespaces: ["shell", "shell"],
-    deferConfigurableTab: true,
-  });
-
-  assert.deepEqual(json(harness.configurablePlugins.getSnapshot()), {
-    loaded: true,
-    namespaces: ["shell", "shell"],
-  });
-
-  harness.declareConfigurableTab();
-  assert.deepEqual(json(harness.configurablePlugins.getSnapshot()), {
-    loaded: true,
-    namespaces: ["shell"],
-  });
-  assert.equal(harness.tabListenerCount, 0);
-  harness.dispose();
-});
-
-test("client bundle stops watching for the configurable tab after disposal", () => {
-  const { plugin } = loadClient();
-  const harness = registerCompatRow(plugin, {
-    settingsNamespaces: ["shell", "shell"],
-    deferConfigurableTab: true,
-  });
-
-  harness.dispose();
-  harness.declareConfigurableTab();
-  assert.equal(harness.tabListenerCount, 0);
-  assert.deepEqual(json(harness.configurablePlugins.getSnapshot()), {
-    loaded: true,
-    namespaces: ["shell", "shell"],
-  });
 });
 
 test("settings card can reset an invalid stored executable", async () => {
@@ -599,20 +548,17 @@ test("client bundle scopes command wrapping and settings styles", () => {
 
 test("package declares the browser bundle for DSH discovery", () => {
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-  assert.equal(pkg.version, "0.4.0");
+  assert.equal(pkg.version, "0.5.0");
   assert.equal(pkg.exports["./client"], "./client.js");
   assert.ok(pkg.files.includes("client.js"));
   assert.deepEqual(pkg.dsh.client, {
     platform: "web",
     inject: [
       "@deepseek-ai/dsh-client-ui-tool",
-      "@deepseek-ai/dsh-client-ui-settings-plugins",
+      "@deepseek-ai/dsh-client-ui-plugin-manager",
       "@deepseek-ai/dsh-client-ui-settings",
-      "@deepseek-ai/dsh-client-ui-primitives",
+      "@deepseek-ai/dsh-client-ui-workspace",
       "@deepseek-ai/dsh-client-locale",
-      "@deepseek-ai/dsh-client-runtime",
-      "@deepseek-ai/dsh-client-connection",
-      "@deepseek-ai/dsh-api-remotes",
     ],
   });
 });

@@ -14,9 +14,9 @@ window.__ModuleLoader__.load({
     } = require("@deepseek-ai/dsh-client-ui-primitives");
 
     const SLOT = "tool.call.toolview";
-    const SETTINGS_SLOT = "settings.plugin.item";
-    const SETTINGS_TAB_SLOT = "settings.plugins.tab";
+    const SETTINGS_SLOT = "plugins.row.config";
     const SETTINGS_NAMESPACE = "git-bash-shell";
+    const SETTINGS_ROW_KEY = "dsh-plugin-git-bash#git-bash-shell";
     const LOCALE_NAMESPACE = "git-bash.settings";
     const PRIORITY = -100;
     const WRAP_ATTR = "data-dsh-git-bash-wrap";
@@ -406,7 +406,13 @@ window.__ModuleLoader__.load({
     }
 
     function GitBashSettingsCard(props) {
-      const { scope, pickDirectory, t } = props;
+      if (props.view === "summary") return props.t("description");
+      return GitBashSettingsEditor(props);
+    }
+
+    function GitBashSettingsEditor(props) {
+      const { scope, pickDirectory, t, view } = props;
+      const page = view === "page";
       const snapshot = useSyncExternalStore(
         (listener) => scope.subscribe(listener),
         () => scope.getSnapshot(),
@@ -417,7 +423,7 @@ window.__ModuleLoader__.load({
       const supported = snapshot.status === "ready" && hasOwn(snapshot.value, "executable");
       const overridden = hasOwn(snapshot.user, "executable");
       const writable = supported && snapshot.writable;
-      const [open, setOpen] = useState(false);
+      const [open, setOpen] = useState(page);
       const [text, setText] = useState(effective);
       const [dirty, setDirty] = useState(false);
       const [resetPending, setResetPending] = useState(false);
@@ -495,11 +501,11 @@ window.__ModuleLoader__.load({
         }
       };
 
-      return createElement("li", {
+      return createElement(page ? "div" : "li", {
         "data-dsh-git-bash-settings": "",
         "data-open": open ? "true" : undefined,
       },
-      createElement("button", {
+      page ? null : createElement("button", {
         type: "button",
         className: "dgb-settings-header",
         "aria-expanded": open,
@@ -590,36 +596,6 @@ window.__ModuleLoader__.load({
       ) : null);
     }
 
-    function installSettingsNamespaceDedupe(ctx) {
-      let stop = () => {};
-      const install = () => {
-        const configurableTab = ctx.slots.entries(SETTINGS_TAB_SLOT)
-          .find((entry) => entry.options.id === "configurable");
-        if (configurableTab === undefined) return false;
-        const store = configurableTab.inject().hooks.configurablePlugins;
-        if (store === undefined) return false;
-        const dedupe = () => {
-          const snapshot = store.getSnapshot();
-          const namespaces = [...new Set(snapshot.namespaces)];
-          if (namespaces.length === snapshot.namespaces.length) return;
-          store.set({ ...snapshot, namespaces });
-        };
-        stop = store.subscribe(dedupe);
-        dedupe();
-        return true;
-      };
-      ctx.effect(() => {
-        if (install()) return stop;
-        const off = ctx.slots.subscribe(SETTINGS_TAB_SLOT, () => {
-          if (install()) off();
-        });
-        return () => {
-          off();
-          stop();
-        };
-      }, "git-bash: deduplicate shadowed settings namespaces");
-    }
-
     function apply(ctx) {
       ctx.effect(() => {
         const disposeCommandStyle = installCommandWrapStyle();
@@ -633,14 +609,10 @@ window.__ModuleLoader__.load({
       const t = ctx.locale.bind(LOCALE_NAMESPACE);
       ctx.effect(() => ctx.locale.register(LOCALE_NAMESPACE, settingsLocales),
         "git-bash: settings dictionaries");
-      // The configurable settings tab collects namespaces from raw keyed entries, so
-      // shadowed cards (same key, different priority) yield duplicate namespaces.
-      installSettingsNamespaceDedupe(ctx);
       const scope = ctx.configForms.get(SETTINGS_NAMESPACE);
       ctx.slots.inject(SETTINGS_SLOT, () => ctx.slots.register({
         name: SETTINGS_SLOT,
-        key: SETTINGS_NAMESPACE,
-        priority: PRIORITY,
+        key: SETTINGS_ROW_KEY,
         locale: LOCALE_NAMESPACE,
         inject: () => ({
           scope,
