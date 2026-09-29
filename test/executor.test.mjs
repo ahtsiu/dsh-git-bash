@@ -11,7 +11,18 @@ import { Config, describeGuardFailure, GitBashExecutor, resolveGitBashPath } fro
 const LOCAL_BASH_CONFIG = LocalBashExecutor.Config;
 const CAN_RUN_NATIVE_GUARD = process.platform === "win32" && process.arch === "x64";
 
-function createExecutor(mode = "danger-full-access") {
+function pluginConfig(overrides = {}) {
+  return Config({
+    timeoutMs: 15_000,
+    maxTimeoutMs: 15_000,
+    maxOutputBytes: 64_000,
+    maxSpillBytes: 1024 * 1024,
+    graceMs: 1_000,
+    ...overrides,
+  });
+}
+
+function createExecutor(mode = "danger-full-access", overrides = {}) {
   const ctx = new Context();
   const workspaceRoot = process.cwd();
   ctx.provide("sandboxPolicy", {
@@ -26,14 +37,13 @@ function createExecutor(mode = "danger-full-access") {
     runnerFailureSignatures: [],
     probeTimeoutMs: 10_000,
   });
-  const executor = new GitBashExecutor(ctx, {
-    timeoutMs: 15_000,
-    maxTimeoutMs: 15_000,
-    maxOutputBytes: 64_000,
-    maxSpillBytes: 1024 * 1024,
-    graceMs: 1_000,
-  });
+  const executor = new GitBashExecutor(ctx, pluginConfig(overrides));
   return { ctx, executor };
+}
+
+async function foreground(executor, request) {
+  const execution = await executor.execute(executor.resolve(request));
+  return execution.result();
 }
 
 async function dispose(ctx) {
@@ -42,19 +52,20 @@ async function dispose(ctx) {
 
 test("extends the shell settings schema with a Git Bash executable", () => {
   assert.equal(LocalBashExecutor.Config, LOCAL_BASH_CONFIG);
-  assert.equal(Config().executable, "");
+  assert.equal(Config().executable.get(), "");
   assert.equal(
-    Config({ executable: "D:\\Apps\\Git\\bin\\bash.exe" }).executable,
+    Config({ executable: "D:\\Apps\\Git\\bin\\bash.exe" }).executable.get(),
     "D:\\Apps\\Git\\bin\\bash.exe",
   );
   assert.equal(
-    Config({ executable: "relative\\bash.exe" }).executable,
+    Config({ executable: "relative\\bash.exe" }).executable.get(),
     "relative\\bash.exe",
   );
+  assert.equal(GitBashExecutor.Config, Config);
   assert.equal(LocalBashExecutor.Config, LOCAL_BASH_CONFIG);
 });
 
-test("reads Git Bash executable changes from the live shell settings scope", async () => {
+test("reads the Git Bash executable from the live profile config", () => {
   const installed = resolveGitBashPath();
   const gitRoot = win32.dirname(win32.dirname(installed));
   const binPath = win32.join(gitRoot, "bin", "bash.exe");
@@ -63,89 +74,29 @@ test("reads Git Bash executable changes from the live shell settings scope", asy
     installed.toLowerCase() === realpathSync.native(binPath).toLowerCase() ? usrBinPath : binPath,
   );
   const initialInvalid = "C:\\missing\\Git\\bin\\bash.exe";
-  let current;
-  let settingsScope;
-  let registrationCount = 0;
-  const ctx = new Context();
+  const { ctx, executor } = createExecutor("danger-full-access", {
+    executable: initialInvalid,
+  });
   try {
-    await ctx.plugin({
-      apply(settingsCtx) {
-        settingsCtx.provide("settings", {
-          installSection(owner, namespace, schema, entry, hooks) {
-            registrationCount += 1;
-            assert.equal(String(namespace), "shell");
-            let section = { executable: initialInvalid };
-            const resolve = (nextSection) => schema({ ...entry, ...nextSection });
-            current = resolve(section);
-            hooks.validate?.(current);
-            hooks.setSource(() => current);
-            hooks.onChange();
-            settingsScope = {
-              update: async (patch) => {
-                const next = resolve({ ...section, ...patch });
-                hooks.validate?.(next);
-                section = { ...section, ...patch };
-                current = next;
-                hooks.onChange();
-              },
-            };
-          },
-        });
-      },
-    });
-
-    const workspaceRoot = process.cwd();
-    ctx.provide("sandboxPolicy", {
-      defaultMode: "danger-full-access",
-      workspaceRoot,
-      resolve: () => ({ mode: "danger-full-access", workspaceRoot }),
-      overrideOf: () => undefined,
-    });
-    new LocalSubprocessRuntime(ctx);
-    new LocalSandboxProvider(ctx, {
-      runnerCommand: [],
-      runnerFailureSignatures: [],
-      probeTimeoutMs: 10_000,
-    });
-    const executor = new GitBashExecutor(ctx, {
-      executable: "",
-      timeoutMs: 15_000,
-      maxTimeoutMs: 15_000,
-      maxOutputBytes: 64_000,
-      maxSpillBytes: 1024 * 1024,
-      graceMs: 1_000,
-    });
-    await new Promise(queueMicrotask);
-
-    assert.equal(LocalBashExecutor.Config, LOCAL_BASH_CONFIG);
-    assert.equal(registrationCount, 1);
-    assert.equal(current.executable, initialInvalid);
-    assert.equal(executor.config.executable, initialInvalid);
+    assert.equal(executor.config.executable.get(), initialInvalid);
     assert.throws(() => executor.executable, /does not exist or is not executable/);
-
-    await assert.rejects(
-      () => settingsScope.update({ executable: "C:\\also-missing\\bash.exe" }),
-      /does not exist or is not executable/,
-    );
-    assert.equal(current.executable, initialInvalid);
-
-    await assert.rejects(
-      () => settingsScope.update({ executable: process.execPath }),
+    assert.throws(
+      () => new GitBashExecutor(ctx, pluginConfig({ executable: process.execPath })).executable,
       /absolute Windows path ending in bash.exe/,
     );
     const relativeInstalled = win32.relative(process.cwd(), installed);
     assert.equal(win32.isAbsolute(relativeInstalled), false);
-    await assert.rejects(
-      () => settingsScope.update({ executable: relativeInstalled }),
+    assert.throws(
+      () => new GitBashExecutor(ctx, pluginConfig({ executable: relativeInstalled })).executable,
       /absolute Windows path ending in bash.exe/,
     );
-    assert.equal(current.executable, initialInvalid);
+    assert.equal(executor.config.executable.get(), initialInvalid);
 
-    await settingsScope.update({ executable: alternate });
-    assert.equal(executor.config.executable, alternate);
-    assert.equal(executor.executable, alternate);
+    const switched = new GitBashExecutor(ctx, pluginConfig({ executable: alternate }));
+    assert.equal(switched.config.executable.get(), alternate);
+    assert.equal(switched.executable, alternate);
   } finally {
-    await dispose(ctx);
+    return dispose(ctx);
   }
 });
 
@@ -178,9 +129,9 @@ test("enriches the guard DACL failure with an actionable hint", () => {
 test("runs foreground commands directly in danger-full-access", async () => {
   const { ctx, executor } = createExecutor();
   try {
-    const result = await executor.run(executor.resolve({
+    const result = await foreground(executor, {
       command: "printf '%s|%s|%s' \"$BASH_VERSION\" \"$MSYSTEM\" \"$BASH\"",
-    }));
+    });
 
     assert.equal(result.exitCode, 0, result.stderr.text);
     assert.equal(result.signal, null);
@@ -199,7 +150,7 @@ test("runs foreground commands directly in danger-full-access", async () => {
 test("runs background commands directly through Git Bash", async () => {
   const { ctx, executor } = createExecutor();
   try {
-    const process = await executor.start(executor.resolve({
+    const process = await executor.execute(executor.resolve({
       command: "printf '%s' \"$MSYSTEM\"",
     }));
     await process.done;
@@ -217,9 +168,9 @@ test("runs background commands directly through Git Bash", async () => {
 test("runs Git Bash and nested MSYS children under read-only", { skip: !CAN_RUN_NATIVE_GUARD }, async () => {
   const { ctx, executor } = createExecutor("read-only");
   try {
-    const result = await executor.run(executor.resolve({
+    const result = await foreground(executor, {
       command: "printf 'root|'; bash --noprofile --norc -c 'printf nested'; printf '|'; git --version",
-    }));
+    });
 
     assert.equal(result.exitCode, 0, result.stderr.text);
     assert.match(result.stdout.text, /^root\|nested\|git version /);
@@ -238,9 +189,9 @@ test("read-only denies workspace writes", { skip: !CAN_RUN_NATIVE_GUARD }, async
   rmSync(probe, { force: true });
   const { ctx, executor } = createExecutor("read-only");
   try {
-    const result = await executor.run(executor.resolve({
+    const result = await foreground(executor, {
       command: "printf blocked > " + probe,
-    }));
+    });
 
     assert.notEqual(result.exitCode, 0);
     assert.match(result.stderr.text, /permission denied/i);
@@ -263,9 +214,9 @@ test("workspace-write allows workspace writes and denies sibling writes", { skip
   rmSync(outside, { force: true });
   const { ctx, executor } = createExecutor("workspace-write");
   try {
-    const allowed = await executor.run(executor.resolve({
+    const allowed = await foreground(executor, {
       command: "printf allowed > " + inside + " && cat " + inside,
-    }));
+    });
     assert.equal(allowed.exitCode, 0, allowed.stderr.text);
     assert.equal(allowed.stdout.text, "allowed");
     assert.equal(existsSync(inside), true);
@@ -275,9 +226,9 @@ test("workspace-write allows workspace writes and denies sibling writes", { skip
       enforcement: "partial",
     });
 
-    const denied = await executor.run(executor.resolve({
+    const denied = await foreground(executor, {
       command: "printf blocked > " + outside,
-    }));
+    });
     assert.notEqual(denied.exitCode, 0);
     assert.match(denied.stderr.text, /permission denied/i);
     assert.equal(existsSync(outside), false);
@@ -296,7 +247,7 @@ test("workspace-write allows workspace writes and denies sibling writes", { skip
 test("reports sandbox facts for restricted background processes", { skip: !CAN_RUN_NATIVE_GUARD }, async () => {
   const { ctx, executor } = createExecutor("read-only");
   try {
-    const process = await executor.start(executor.resolve({
+    const process = await executor.execute(executor.resolve({
       command: "printf guarded-background",
     }));
     await process.done;
@@ -321,9 +272,9 @@ test("reports sandbox facts for restricted background processes", { skip: !CAN_R
 test("preserves restricted token invariants in native descendants", { skip: !CAN_RUN_NATIVE_GUARD }, async () => {
   const { ctx, executor } = createExecutor("read-only");
   try {
-    const result = await executor.run(executor.resolve({
+    const result = await foreground(executor, {
       command: "./native/bin/win32-x64/msys-token-guard.exe --probe-current-token",
-    }));
+    });
 
     assert.equal(result.exitCode, 0, result.stderr.text);
     assert.equal(result.stdout.text.replace(/\r\n/g, "\n"), "token-adjust-default=denied\n");
@@ -341,10 +292,10 @@ test("times out the complete restricted process tree", { skip: !CAN_RUN_NATIVE_G
   const { ctx, executor } = createExecutor("read-only");
   const started = Date.now();
   try {
-    const result = await executor.run(executor.resolve({
+    const result = await foreground(executor, {
       command: "sleep 10",
       timeoutMs: 200,
-    }));
+    });
 
     assert.equal(result.timedOut, true);
     assert.equal(result.aborted, false);
@@ -365,10 +316,10 @@ test("aborts the complete restricted foreground process tree", { skip: !CAN_RUN_
   const timer = setTimeout(() => controller.abort(), 200);
   const started = Date.now();
   try {
-    const result = await executor.run(executor.resolve({
+    const result = await foreground(executor, {
       command: "sleep 10",
       signal: controller.signal,
-    }));
+    });
 
     assert.equal(result.timedOut, false);
     assert.equal(result.aborted, true);
@@ -387,7 +338,7 @@ test("aborts the complete restricted foreground process tree", { skip: !CAN_RUN_
 test("kills the complete restricted background process tree", { skip: !CAN_RUN_NATIVE_GUARD }, async () => {
   const { ctx, executor } = createExecutor("read-only");
   try {
-    const process = await executor.start(executor.resolve({ command: "sleep 10" }));
+    const process = await executor.execute(executor.resolve({ command: "sleep 10" }));
     assert.equal(process.status, "running");
     assert.equal(process.kill(), true);
     await process.done;

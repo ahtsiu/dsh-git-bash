@@ -16,7 +16,7 @@ window.__ModuleLoader__.load({
     const SLOT = "tool.call.toolview";
     const SETTINGS_SLOT = "settings.plugin.item";
     const SETTINGS_TAB_SLOT = "settings.plugins.tab";
-    const SETTINGS_NAMESPACE = "shell";
+    const SETTINGS_NAMESPACE = "git-bash-shell";
     const LOCALE_NAMESPACE = "git-bash.settings";
     const PRIORITY = -100;
     const WRAP_ATTR = "data-dsh-git-bash-wrap";
@@ -636,7 +636,7 @@ window.__ModuleLoader__.load({
       // The configurable settings tab collects namespaces from raw keyed entries, so
       // shadowed cards (same key, different priority) yield duplicate namespaces.
       installSettingsNamespaceDedupe(ctx);
-      const scope = ctx.settingsScope.bind({ namespace: SETTINGS_NAMESPACE });
+      const scope = ctx.configForms.get(SETTINGS_NAMESPACE);
       ctx.slots.inject(SETTINGS_SLOT, () => ctx.slots.register({
         name: SETTINGS_SLOT,
         key: SETTINGS_NAMESPACE,
@@ -677,9 +677,7 @@ window.__ModuleLoader__.load({
     const inject = [
       "slots",
       "locale",
-      "settingsScope",
-      "connection",
-      "remote",
+      "configForms",
       "uiWorkspace",
     ];
     module.exports = {

@@ -151,9 +151,9 @@ function registerCompatRow(plugin, options = {}) {
         return () => {};
       },
     },
-    settingsScope: {
-      bind(spec) {
-        assert.deepEqual(json(spec), { namespace: "shell" });
+    configForms: {
+      get(entryId) {
+        assert.equal(entryId, "git-bash-shell");
         return settings.scope;
       },
     },
@@ -257,9 +257,7 @@ test("client bundle registers a higher-priority Bash row wrapper", () => {
   assert.deepEqual(json(plugin.inject), [
     "slots",
     "locale",
-    "settingsScope",
-    "connection",
-    "remote",
+    "configForms",
     "uiWorkspace",
   ]);
 
@@ -309,7 +307,7 @@ test("client bundle registers and operates the Git Bash settings card", async ()
   const { settingsRegistration } = harness;
   assert.deepEqual(json(settingsRegistration.options), {
     name: "settings.plugin.item",
-    key: "shell",
+    key: "git-bash-shell",
     priority: -100,
     locale: "git-bash.settings",
   });
@@ -601,7 +599,7 @@ test("client bundle scopes command wrapping and settings styles", () => {
 
 test("package declares the browser bundle for DSH discovery", () => {
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-  assert.equal(pkg.version, "0.3.3");
+  assert.equal(pkg.version, "0.4.0");
   assert.equal(pkg.exports["./client"], "./client.js");
   assert.ok(pkg.files.includes("client.js"));
   assert.deepEqual(pkg.dsh.client, {
