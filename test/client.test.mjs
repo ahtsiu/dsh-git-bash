@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
+import semver from "semver";
 
 const CLIENT_PATH = new URL("../client.js", import.meta.url);
 
@@ -548,7 +549,7 @@ test("client bundle scopes command wrapping and settings styles", () => {
 
 test("package declares the browser bundle for DSH discovery", () => {
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-  assert.equal(pkg.version, "0.6.0");
+  assert.equal(pkg.version, "0.6.1");
   assert.equal(pkg.exports["./client"], "./client.js");
   assert.ok(pkg.files.includes("client.js"));
   assert.deepEqual(pkg.dsh.client, {
@@ -561,4 +562,26 @@ test("package declares the browser bundle for DSH discovery", () => {
       "@deepseek-ai/dsh-client-locale",
     ],
   });
+});
+
+// DSH rejects a plugin whose declared DSH peer ranges do not admit the running
+// host, so keep this checkout's ranges in step with the host it builds against.
+test("declared DSH peer ranges admit the installed host", () => {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const host = JSON.parse(
+    readFileSync(
+      new URL("../node_modules/@deepseek-ai/dsh-shell/package.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const peers = Object.entries(pkg.peerDependencies).filter(
+    ([name]) => name === "@deepseek-ai/dsh" || name.startsWith("@deepseek-ai/dsh-"),
+  );
+  assert.ok(peers.length > 0);
+  for (const [name, range] of peers) {
+    assert.ok(
+      semver.satisfies(host.version, range, { includePrerelease: true }),
+      `${name} "${range}" rejects the installed DSH ${host.version}`,
+    );
+  }
 });
